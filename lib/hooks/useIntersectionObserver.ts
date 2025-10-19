@@ -1,58 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
+// lib/hooks/useIntersectionObserver.ts
+'use client';
 
-interface UseIntersectionObserverOptions {
-  threshold?: number | number[];
-  root?: Element | null;
-  rootMargin?: string;
-  freezeOnceVisible?: boolean;
-}
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function useIntersectionObserver(
-  options: UseIntersectionObserverOptions = {}
-) {
-  const {
-    threshold = 0,
-    root = null,
-    rootMargin = '0%',
-    freezeOnceVisible = false,
-  } = options;
+type Options = Omit<IntersectionObserverInit, 'root'> & {
+  root?: Element | Document | null;
+};
 
+export function useIntersectionObserver({
+  threshold = 0,
+  root = null,
+  rootMargin = '0px',
+  freezeOnceVisible = false,
+}: Options & { freezeOnceVisible?: boolean } = {}) {
   const [entry, setEntry] = useState<IntersectionObserverEntry>();
   const [isIntersecting, setIsIntersecting] = useState(false);
-  const elementRef = useRef<Element>();
+
+  // 👇 Inicializar con null y tipar con unión
+  const elementRef = useRef<Element | null>(null);
 
   const frozen = entry?.isIntersecting && freezeOnceVisible;
 
-  const updateEntry = ([entry]: IntersectionObserverEntry[]) => {
-    const wasIntersecting = isIntersecting;
-    const nowIntersecting = entry.isIntersecting;
-    
-    if (wasIntersecting !== nowIntersecting) {
-      console.log(`🔍 [IntersectionObserver] Visibility changed: ${nowIntersecting ? 'VISIBLE' : 'HIDDEN'}`, {
-        intersectionRatio: entry.intersectionRatio,
-        boundingClientRect: entry.boundingClientRect,
-        rootBounds: entry.rootBounds,
-        target: entry.target
-      });
-    }
-    
-    setEntry(entry);
-    setIsIntersecting(nowIntersecting);
-  };
+  const updateEntry = useCallback((e: IntersectionObserverEntry) => {
+    setEntry(e);
+    setIsIntersecting(e.isIntersecting);
+  }, []);
 
   useEffect(() => {
-    const node = elementRef?.current;
-    const hasIOSupport = !!window.IntersectionObserver;
+    const node = elementRef.current;
+    if (!node || frozen) return;
 
-    if (!hasIOSupport || frozen || !node) return;
-
-    const observerParams = { threshold, root, rootMargin };
-    const observer = new IntersectionObserver(updateEntry, observerParams);
+    const observer = new IntersectionObserver(
+      (entries) => updateEntry(entries[0]),
+      { threshold, root: (root as Element | Document | null) ?? null, rootMargin }
+    );
 
     observer.observe(node);
-
     return () => observer.disconnect();
-  }, [elementRef, threshold, root, rootMargin, frozen]);
+  }, [threshold, root, rootMargin, frozen, updateEntry]);
 
   return { ref: elementRef, entry, isIntersecting };
 }
